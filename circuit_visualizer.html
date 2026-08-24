@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Digital Twin - Interactive Wiring Schematic</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #07090e;
+      --panel-bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #21262d;
+      --border-bright: #30363d;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --text: #f0f6fc;
+      --text-muted: #8b949e;
+      --text-dim: #6e7681;
+      
+      --c-red: #f85149;
+      --c-red-dim: rgba(248, 81, 73, 0.15);
+      --c-green: #3fb950;
+      --c-green-dim: rgba(63, 185, 80, 0.15);
+      --c-blue: #58a6ff;
+      --c-blue-dim: rgba(88, 166, 255, 0.15);
+      --c-yellow: #d29922;
+      --c-yellow-dim: rgba(210, 153, 34, 0.15);
+      --c-purple: #bc8cff;
+      --c-purple-dim: rgba(188, 140, 255, 0.15);
+      --c-orange: #f0883e;
+      --c-orange-dim: rgba(240, 136, 62, 0.15);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* Top Bar */
+    header {
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 20;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .brand-title { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.2px; }
+    .brand-sub { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .btn {
+      padding: 7px 13px;
+      border-radius: 6px;
+      border: 1px solid var(--border-bright);
+      background: var(--card-bg);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { background: #21262d; border-color: #8b949e; }
+    .btn-sim {
+      background: #8957e5;
+      border-color: #8957e5;
+      color: #fff;
+    }
+    .btn-sim:hover { background: #a371f7; }
+    .btn-sim.active {
+      background: #da3633;
+      border-color: #f85149;
+      box-shadow: 0 0 16px rgba(248, 81, 73, 0.4);
+      animation: pulse-border 1.5s infinite;
+    }
+    @keyframes pulse-border { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+
+    /* Workspace */
+    .workspace { display: flex; flex: 1; position: relative; overflow: hidden; }
+
+    #canvas-container {
+      flex: 1;
+      height: 100%;
+      background: 
+        radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.03) 0%, transparent 80%),
+        radial-gradient(circle, #161b22 1px, transparent 1px);
+      background-size: 100% 100%, 24px 24px;
+      cursor: grab;
+      position: relative;
+      overflow: hidden;
+    }
+    #canvas-container:active { cursor: grabbing; }
+
+    svg#schematic-svg {
+      width: 100%;
+      height: 100%;
+      transform-origin: 0 0;
+      text-rendering: geometricPrecision;
+    }
+
+    /* Floating Pill Filter Bar */
+    .filter-bar {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-bright);
+      border-radius: 40px;
+      padding: 5px;
+      display: flex;
+      gap: 4px;
+      z-index: 10;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+    }
+    .filter-btn {
+      padding: 6px 14px;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text-muted);
+      border: none;
+      background: transparent;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .filter-btn.active {
+      background: #21262d;
+      color: var(--accent);
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    /* Right Sidebar */
+    aside.sidebar {
+      width: 320px;
+      background: var(--panel-bg);
+      border-left: 1px solid var(--border);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      z-index: 10;
+    }
+    .sidebar-heading {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card h3 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #21262d;
+      color: var(--accent);
+    }
+    .card p { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+    .pin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .pin-table th {
+      text-align: left;
+      padding: 6px 4px;
+      color: var(--text-dim);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    .pin-table td {
+      padding: 6px 4px;
+      border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+      color: var(--text);
+    }
+
+    /* SVG Component & Wire Styles */
+    .wire {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke-width 0.2s, opacity 0.2s, stroke 0.2s;
+      cursor: pointer;
+    }
+    .wire:hover { stroke-width: 5 !important; filter: drop-shadow(0 0 6px currentColor); }
+    .wire.dimmed { opacity: 0.1 !important; }
+    
+    .simulating .wire-pulse {
+      stroke-dasharray: 8 16;
+      animation: wire-flow 0.8s linear infinite;
+    }
+    @keyframes wire-flow { to { stroke-dashoffset: -24; } }
+
+    .comp-box {
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .comp-box:hover rect.board-bg {
+      stroke: var(--accent) !important;
+      stroke-width: 2 !important;
+      filter: drop-shadow(0 0 10px var(--accent-glow));
+    }
+
+    /* Tooltip */
+    #tip {
+      position: absolute;
+      background: #1f2937;
+      border: 1px solid #374151;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #fff;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 30;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">DT</div>
+      <div>
+        <div class="brand-title">ESP32 Digital Twin Node — Schematic Explorer</div>
+        <div class="brand-sub">Direct pin-to-pin wiring map &bull; Firmware v2.4</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn" id="btn-reset">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        Reset Canvas
+      </button>
+      <button class="btn btn-sim" id="btn-sim">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Simulate Alarm Pulse
+      </button>
+    </div>
+  </header>
+
+  <!-- Workspace -->
+  <div class="workspace">
+
+    <div id="canvas-container">
+      <svg id="schematic-svg" viewBox="0 0 1300 860">
+        <defs>
+          <filter id="led-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+            <feMerge>
+              <feMergeNode in="blur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+
+        <!-- ======================= WIRES LAYER ======================= -->
+        <g id="wires-group">
+          <!-- 3.3V Power Bus (Red) -->
+          <path class="wire wire-pwr" data-group="pwr" d="M 520,240 C 400,240 370,160 300,160" stroke="#f85149" stroke-width="2.5" />
+          <path class="wire wire-pwr" data-group="pwr" d="M 520,240 C 400,240 370,360 300,360" stroke="#f85149" stroke-width="2.5" />
+          <path class="wire wire-pwr" data-group="pwr" d="M 520,240 C 400,240 370,550 300,550" stroke="#f85149" stroke-width="2.5" />
+
+          <!-- GND Bus (Muted Slate) -->
+          <path class="wire wire-gnd" data-group="gnd" d="M 520,280 C 400,280 370,220 300,220" stroke="#6e7681" stroke-width="2.5" />
+          <path class="wire wire-gnd" data-group="gnd" d="M 520,280 C 400,280 370,400 300,400" stroke="#6e7681" stroke-width="2.5" />
+          <path class="wire wire-gnd" data-group="gnd" d="M 520,280 C 400,280 370,590 300,590" stroke="#6e7681" stroke-width="2.5" />
+          <path class="wire wire-gnd" data-group="gnd" d="M 740,280 C 820,280 870,220 950,220" stroke="#6e7681" stroke-width="2.5" />
+          <path class="wire wire-gnd" data-group="gnd" d="M 740,280 C 820,280 870,400 950,400" stroke="#6e7681" stroke-width="2.5" />
+          <path class="wire wire-gnd" data-group="gnd" d="M 740,280 C 840,280 880,720 1060,720" stroke="#6e7681" stroke-width="2.5" />
+
+          <!-- DHT22 DATA -> GPIO 4 (Yellow) -->
+          <path class="wire wire-sig" data-group="sig" d="M 300,190 C 420,190 440,320 520,320" stroke="#d29922" stroke-width="3" />
+
+          <!-- I2C SDA -> GPIO 21 (Sky Blue) -->
+          <path class="wire wire-i2c" data-group="i2c" d="M 300,440 C 430,440 440,420 520,420" stroke="#58a6ff" stroke-width="3" />
+          <path class="wire wire-i2c" data-group="i2c" d="M 300,670 C 440,670 440,420 520,420" stroke="#58a6ff" stroke-width="3" />
+
+          <!-- I2C SCL -> GPIO 22 (Emerald Green) -->
+          <path class="wire wire-i2c" data-group="i2c" d="M 300,480 C 430,480 440,460 520,460" stroke="#3fb950" stroke-width="3" />
+          <path class="wire wire-i2c" data-group="i2c" d="M 300,630 C 440,630 440,460 520,460" stroke="#3fb950" stroke-width="3" />
+
+          <!-- Buzzer (+) -> GPIO 18 (Orange) -->
+          <path class="wire wire-act" data-group="act" d="M 740,380 C 840,380 870,180 950,180" stroke="#f0883e" stroke-width="3" />
+
+          <!-- 5V VIN -> Relay VCC (Red 5V) -->
+          <path class="wire wire-pwr" data-group="pwr" d="M 740,240 C 820,240 870,360 950,360" stroke="#f85149" stroke-width="3" />
+          <!-- 5V VIN -> Relay COM Contact -->
+          <path class="wire wire-pwr" data-group="pwr" d="M 740,240 C 850,240 900,480 1060,480" stroke="#f85149" stroke-width="3" />
+
+          <!-- Relay Signal IN -> GPIO 26 (Purple) -->
+          <path class="wire wire-act" data-group="act" d="M 740,480 C 830,480 870,440 950,440" stroke="#bc8cff" stroke-width="3" />
+
+          <!-- Relay NO -> LED Anode (+) (Green Switched Line) -->
+          <path class="wire wire-act" data-group="act" d="M 1060,440 C 1120,440 1120,540 1060,560" stroke="#3fb950" stroke-width="3" />
+
+          <!-- LED Cathode -> 330Ω Resistor -->
+          <line x1="1060" y1="600" x2="1060" y2="650" stroke="#8b949e" stroke-width="2.5" />
+        </g>
+
+
+        <!-- ======================= COMPONENTS ======================= -->
+
+        <!-- 1. ESP32 DevKit V1 (Center) -->
+        <g class="comp-box" id="comp-esp32" transform="translate(520, 170)">
+          <!-- PCB Body -->
+          <rect class="board-bg" x="0" y="0" width="220" height="400" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5" />
+          
+          <!-- ESP-WROOM-32 Shield -->
+          <rect x="35" y="45" width="150" height="180" rx="4" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+          <text x="110" y="75" fill="#f0f6fc" font-size="12" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', monospace">ESP-WROOM-32</text>
+          
+          <!-- USB Port -->
+          <rect x="85" y="380" width="50" height="20" rx="3" fill="#30363d" />
+          
+          <text x="110" y="270" fill="#38bdf8" font-size="13" font-weight="700" text-anchor="middle">ESP32 DevKit V1</text>
+          <text x="110" y="290" fill="#8b949e" font-size="10" text-anchor="middle" font-family="'JetBrains Mono', monospace">Dual-Core Node</text>
+
+          <!-- Pin Badges (Left) -->
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <!-- 3V3 -->
+            <rect x="0" y="60" width="60" height="20" rx="3" fill="#f85149" opacity="0.15"/>
+            <text x="8" y="74" fill="#f85149">3V3</text>
+            <circle cx="0" cy="70" r="4" fill="#f85149"/>
+
+            <!-- GND -->
+            <rect x="0" y="100" width="60" height="20" rx="3" fill="#6e7681" opacity="0.15"/>
+            <text x="8" y="114" fill="#8b949e">GND</text>
+            <circle cx="0" cy="110" r="4" fill="#6e7681"/>
+
+            <!-- GPIO 4 -->
+            <rect x="0" y="140" width="70" height="20" rx="3" fill="#d29922" opacity="0.15"/>
+            <text x="8" y="154" fill="#d29922">GPIO 4</text>
+            <circle cx="0" cy="150" r="4" fill="#d29922"/>
+
+            <!-- GPIO 21 -->
+            <rect x="0" y="240" width="95" height="20" rx="3" fill="#58a6ff" opacity="0.15"/>
+            <text x="8" y="254" fill="#58a6ff">G21 (SDA)</text>
+            <circle cx="0" cy="250" r="4" fill="#58a6ff"/>
+
+            <!-- GPIO 22 -->
+            <rect x="0" y="280" width="95" height="20" rx="3" fill="#3fb950" opacity="0.15"/>
+            <text x="8" y="294" fill="#3fb950">G22 (SCL)</text>
+            <circle cx="0" cy="290" r="4" fill="#3fb950"/>
+          </g>
+
+          <!-- Pin Badges (Right) -->
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <!-- VIN -->
+            <rect x="150" y="60" width="70" height="20" rx="3" fill="#f85149" opacity="0.15"/>
+            <text x="212" y="74" fill="#f85149" text-anchor="end">VIN (5V)</text>
+            <circle cx="220" cy="70" r="4" fill="#f85149"/>
+
+            <!-- GND -->
+            <rect x="160" y="100" width="60" height="20" rx="3" fill="#6e7681" opacity="0.15"/>
+            <text x="212" y="114" fill="#8b949e" text-anchor="end">GND</text>
+            <circle cx="220" cy="110" r="4" fill="#6e7681"/>
+
+            <!-- GPIO 18 -->
+            <rect x="145" y="200" width="75" height="20" rx="3" fill="#f0883e" opacity="0.15"/>
+            <text x="212" y="214" fill="#f0883e" text-anchor="end">GPIO 18</text>
+            <circle cx="220" cy="210" r="4" fill="#f0883e"/>
+
+            <!-- GPIO 26 -->
+            <rect x="145" y="300" width="75" height="20" rx="3" fill="#bc8cff" opacity="0.15"/>
+            <text x="212" y="314" fill="#bc8cff" text-anchor="end">GPIO 26</text>
+            <circle cx="220" cy="310" r="4" fill="#bc8cff"/>
+          </g>
+        </g>
+
+
+        <!-- 2. DHT22 Sensor (Top-Left) -->
+        <g class="comp-box" id="comp-dht" transform="translate(130, 110)">
+          <rect class="board-bg" x="0" y="0" width="170" height="130" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+          <rect x="12" y="12" width="146" height="55" rx="4" fill="#21262d"/>
+          <!-- Clean Vents -->
+          <line x1="26" y1="26" x2="144" y2="26" stroke="#484f58" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="26" y1="38" x2="144" y2="38" stroke="#484f58" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="26" y1="50" x2="144" y2="50" stroke="#484f58" stroke-width="2.5" stroke-linecap="round"/>
+
+          <text x="85" y="85" fill="#f0f6fc" font-size="12" font-weight="700" text-anchor="middle">DHT22 (AM2302)</text>
+          <text x="85" y="100" fill="#8b949e" font-size="10" text-anchor="middle" font-family="'JetBrains Mono', monospace">Temp &amp; Humidity</text>
+
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <text x="160" y="54" fill="#f85149" text-anchor="end">VCC (3.3V)</text>
+            <circle cx="170" cy="50" r="4" fill="#f85149"/>
+
+            <text x="160" y="84" fill="#d29922" text-anchor="end">DATA (G4)</text>
+            <circle cx="170" cy="80" r="4" fill="#d29922"/>
+
+            <text x="160" y="114" fill="#8b949e" text-anchor="end">GND</text>
+            <circle cx="170" cy="110" r="4" fill="#6e7681"/>
+          </g>
+        </g>
+
+
+        <!-- 3. MPU6050 Accelerometer & Gyro (Mid-Left) -->
+        <g class="comp-box" id="comp-mpu" transform="translate(130, 310)">
+          <rect class="board-bg" x="0" y="0" width="170" height="190" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+          <rect x="25" y="45" width="50" height="50" rx="3" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+          <text x="50" y="74" fill="#58a6ff" font-size="9" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', monospace">MPU</text>
+
+          <text x="85" y="26" fill="#f0f6fc" font-size="12" font-weight="700" text-anchor="middle">MPU6050 (0x68)</text>
+          <text x="85" y="125" fill="#58a6ff" font-size="10" font-weight="600" text-anchor="middle">Y-Axis Motion</text>
+
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <text x="160" y="54" fill="#f85149" text-anchor="end">VCC (3.3V)</text>
+            <circle cx="170" cy="50" r="4" fill="#f85149"/>
+
+            <text x="160" y="94" fill="#8b949e" text-anchor="end">GND</text>
+            <circle cx="170" cy="90" r="4" fill="#6e7681"/>
+
+            <text x="160" y="134" fill="#58a6ff" text-anchor="end">SDA (G21)</text>
+            <circle cx="170" cy="130" r="4" fill="#58a6ff"/>
+
+            <text x="160" y="174" fill="#3fb950" text-anchor="end">SCL (G22)</text>
+            <circle cx="170" cy="170" r="4" fill="#3fb950"/>
+          </g>
+        </g>
+
+
+        <!-- 4. 1.3" OLED Display (Bottom-Left) -->
+        <g class="comp-box" id="comp-oled" transform="translate(130, 530)">
+          <rect class="board-bg" x="0" y="0" width="170" height="180" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+          <rect x="14" y="25" width="142" height="95" rx="3" fill="#0d1117" stroke="#30363d"/>
+          
+          <rect x="16" y="27" width="138" height="16" fill="#21262d"/>
+          <text x="85" y="39" fill="#f0f6fc" font-size="8" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', monospace">DIGITAL TWIN [OK]</text>
+          <text x="24" y="62" fill="#58a6ff" font-size="9" font-weight="600" font-family="'JetBrains Mono', monospace">T: 28.5C  H: 74%</text>
+          <text x="24" y="80" fill="#3fb950" font-size="9" font-family="'JetBrains Mono', monospace">Y-Acc: 0.2 m/s²</text>
+          <text x="24" y="104" fill="#8b949e" font-size="8" font-family="'JetBrains Mono', monospace">IP: 192.168.4.1</text>
+
+          <text x="85" y="145" fill="#f0f6fc" font-size="11" font-weight="700" text-anchor="middle">1.3" OLED (SH1106)</text>
+
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <text x="160" y="24" fill="#f85149" text-anchor="end">VCC</text>
+            <circle cx="170" cy="20" r="4" fill="#f85149"/>
+
+            <text x="160" y="64" fill="#8b949e" text-anchor="end">GND</text>
+            <circle cx="170" cy="60" r="4" fill="#6e7681"/>
+
+            <text x="160" y="104" fill="#3fb950" text-anchor="end">SCL</text>
+            <circle cx="170" cy="100" r="4" fill="#3fb950"/>
+
+            <text x="160" y="144" fill="#58a6ff" text-anchor="end">SDA</text>
+            <circle cx="170" cy="140" r="4" fill="#58a6ff"/>
+          </g>
+        </g>
+
+
+        <!-- 5. 2-Wire Buzzer (Top-Right) -->
+        <g class="comp-box" id="comp-buzzer" transform="translate(950, 130)">
+          <circle class="board-bg" cx="75" cy="75" r="60" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+          <circle cx="75" cy="75" r="16" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+          
+          <text x="75" y="44" fill="#f0883e" font-size="13" font-weight="700" text-anchor="middle">+</text>
+          <text x="75" y="112" fill="#f0f6fc" font-size="11" font-weight="700" text-anchor="middle">BUZZER</text>
+          <text x="75" y="126" fill="#8b949e" font-size="9" text-anchor="middle" font-family="'JetBrains Mono', monospace">2-Wire Alarm</text>
+
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <circle cx="0" cy="50" r="4" fill="#f0883e"/>
+            <text x="12" y="54" fill="#f0883e">(+) GPIO 18</text>
+
+            <circle cx="0" cy="90" r="4" fill="#6e7681"/>
+            <text x="12" y="94" fill="#8b949e">(-) GND</text>
+          </g>
+        </g>
+
+
+        <!-- 6. 5V Relay Module (Mid-Right) -->
+        <g class="comp-box" id="comp-relay" transform="translate(950, 310)">
+          <rect class="board-bg" x="0" y="0" width="200" height="200" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+          
+          <!-- Blue Relay Cube -->
+          <rect x="45" y="30" width="110" height="140" rx="4" fill="#1f6feb" stroke="#388bfd" stroke-width="1"/>
+          <text x="100" y="65" fill="#ffffff" font-size="11" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', monospace">SONGLE</text>
+          <text x="100" y="85" fill="#c9d1d9" font-size="9" text-anchor="middle" font-family="'JetBrains Mono', monospace">SRD-05VDC</text>
+          <text x="100" y="125" fill="#ffffff" font-size="9" text-anchor="middle" font-family="'JetBrains Mono', monospace">5V Relay</text>
+
+          <!-- Left Inputs -->
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <circle cx="0" cy="50" r="4" fill="#f85149"/>
+            <text x="12" y="54" fill="#f85149">VCC (5V)</text>
+
+            <circle cx="0" cy="90" r="4" fill="#6e7681"/>
+            <text x="12" y="94" fill="#8b949e">GND</text>
+
+            <circle cx="0" cy="130" r="4" fill="#bc8cff"/>
+            <text x="12" y="134" fill="#bc8cff">IN (G26)</text>
+          </g>
+
+          <!-- Right Terminals -->
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <circle cx="200" cy="50" r="5" fill="#30363d" stroke="#8b949e"/>
+            <text x="188" y="54" fill="#8b949e" text-anchor="end">NC</text>
+
+            <circle cx="200" cy="90" r="5" fill="#238636" stroke="#3fb950"/>
+            <text x="188" y="94" fill="#3fb950" text-anchor="end">NO</text>
+
+            <circle cx="200" cy="130" r="5" fill="#da3633" stroke="#f85149"/>
+            <text x="188" y="134" fill="#f85149" text-anchor="end">COM (5V)</text>
+          </g>
+        </g>
+
+
+        <!-- 7. Alert LED & 330 Ohm Resistor (Bottom-Right) -->
+        <g class="comp-box" id="comp-led" transform="translate(1010, 540)">
+          <!-- Red LED Dome -->
+          <circle id="vis-led" cx="50" cy="35" r="20" fill="#da3633" stroke="#f85149" stroke-width="1.5"/>
+          <text x="50" y="39" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">LED</text>
+
+          <g font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600">
+            <text x="80" y="24" fill="#3fb950">[+] Anode</text>
+            <text x="80" y="56" fill="#8b949e">[-] Cathode</text>
+          </g>
+
+          <!-- 330 Ohm Resistor Body -->
+          <rect x="25" y="105" width="50" height="18" rx="4" fill="#30363d" stroke="#8b949e" stroke-width="1"/>
+          <!-- Color Bands: Orange - Orange - Brown - Gold -->
+          <rect x="33" y="105" width="4" height="18" fill="#f0883e"/>
+          <rect x="42" y="105" width="4" height="18" fill="#f0883e"/>
+          <rect x="51" y="105" width="4" height="18" fill="#8b5a2b"/>
+          <rect x="62" y="105" width="4" height="18" fill="#d29922"/>
+
+          <text x="50" y="145" fill="#f0f6fc" font-size="11" font-weight="700" text-anchor="middle">330Ω Resistor</text>
+          <text x="50" y="162" fill="#8b949e" font-size="9" text-anchor="middle" font-family="'JetBrains Mono', monospace">Cathode ──► GND</text>
+
+          <circle cx="50" cy="180" r="4" fill="#6e7681"/>
+        </g>
+
+      </svg>
+
+      <!-- Bottom Filter Bar -->
+      <div class="filter-bar">
+        <button class="filter-btn active" data-f="all">All Wires</button>
+        <button class="filter-btn" data-f="pwr">Power (5V &amp; 3.3V)</button>
+        <button class="filter-btn" data-f="gnd">Ground (GND)</button>
+        <button class="filter-btn" data-f="i2c">I2C Bus (SDA / SCL)</button>
+        <button class="filter-btn" data-f="sig">DHT22 (GPIO 4)</button>
+        <button class="filter-btn" data-f="act">Actuators (Relay &amp; Buzzer)</button>
+      </div>
+    </div>
+
+    <!-- Inspector Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-heading">Component Inspector</div>
+
+      <div class="card" id="details-card">
+        <h3><span id="det-title">System Overview</span> <span class="tag" id="det-tag">NORMAL</span></h3>
+        <p id="det-desc">Click any component on the canvas to view detailed pin mappings, operating voltage, and firmware behavior.</p>
+      </div>
+
+      <div class="sidebar-heading">Direct Pin Assignment</div>
+      <div class="card">
+        <table class="pin-table">
+          <thead>
+            <tr><th>PIN</th><th>COMPONENT</th><th>FUNCTION</th></tr>
+          </thead>
+          <tbody>
+            <tr><td style="color:var(--c-yellow);">GPIO 4</td><td>DHT22</td><td>1-Wire Data</td></tr>
+            <tr><td style="color:var(--c-orange);">GPIO 18</td><td>Buzzer</td><td>Alarm Out</td></tr>
+            <tr><td style="color:var(--c-blue);">GPIO 21</td><td>OLED + MPU</td><td>I2C SDA</td></tr>
+            <tr><td style="color:var(--c-green);">GPIO 22</td><td>OLED + MPU</td><td>I2C SCL</td></tr>
+            <tr><td style="color:var(--c-purple);">GPIO 26</td><td>5V Relay</td><td>Signal IN</td></tr>
+            <tr><td style="color:var(--c-red);">3V3</td><td>Sensors</td><td>3.3V VCC</td></tr>
+            <tr><td style="color:var(--c-red);">VIN</td><td>Relay Coil</td><td>5.0V VCC</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sidebar-heading">Safety Alert Loop</div>
+      <div class="card">
+        <p>When Temperature &gt; 35°C, Humidity &gt; 85%, or Y-Motion &gt; 4.0 m/s²:</p>
+        <p style="color:#fff; font-weight:600; margin-top:4px;">&bull; Buzzer pings for 120ms<br>&bull; Relay switches ON &bull; LED flashes<br>&bull; Cycle repeats every 2.0s</p>
+      </div>
+    </aside>
+
+  </div>
+
+  <div id="tip"></div>
+
+  <!-- Interactive JavaScript -->
+  <script>
+    // Zoom & Pan Engine
+    const container = document.getElementById('canvas-container');
+    const svg = document.getElementById('schematic-svg');
+    let scale = 1, px = 0, py = 0, start = { x: 0, y: 0 }, isPanning = false;
+
+    function applyTransform() {
+      svg.style.transform = `translate(${px}px, ${py}px) scale(${scale})`;
+    }
+
+    container.onmousedown = function (e) {
+      if (e.target.closest('.filter-bar')) return;
+      isPanning = true;
+      start = { x: e.clientX - px, y: e.clientY - py };
+    };
+
+    window.onmousemove = function (e) {
+      if (!isPanning) return;
+      px = e.clientX - start.x;
+      py = e.clientY - start.y;
+      applyTransform();
+    };
+
+    window.onmouseup = function () { isPanning = false; };
+
+    container.onwheel = function (e) {
+      e.preventDefault();
+      const xs = (e.clientX - px) / scale;
+      const ys = (e.clientY - py) / scale;
+      const delta = -e.deltaY;
+      (delta > 0) ? (scale *= 1.15) : (scale /= 1.15);
+      scale = Math.min(Math.max(0.5, scale), 3.0);
+      px = e.clientX - xs * scale;
+      py = e.clientY - ys * scale;
+      applyTransform();
+    };
+
+    document.getElementById('btn-reset').onclick = function() {
+      scale = 1; px = 0; py = 0; applyTransform();
+    };
+
+    // Component details
+    const compData = {
+      'comp-esp32': {
+        title: 'ESP32 DevKit V1',
+        tag: 'CORE MCU',
+        desc: 'Dual-core microcontroller. Executes 100ms motion sampling, 1.5s DHT22 reads, runs the web dashboard on port 80, and drives the safety actuation loop.'
+      },
+      'comp-dht': {
+        title: 'DHT22 Sensor',
+        tag: 'TEMPERATURE & HUMIDITY',
+        desc: 'High-precision environmental sensor on GPIO 4. Provides room temperature and relative humidity with single-wire digital encoding.'
+      },
+      'comp-mpu': {
+        title: 'MPU6050 Sensor',
+        tag: '6-AXIS GYRO & ACCEL',
+        desc: 'Communicates over I2C (GPIO 21 SDA / GPIO 22 SCL). Samples Y-Axis vibration and gyro velocity to detect physical machine shaking.'
+      },
+      'comp-oled': {
+        title: '1.3" OLED (SH1106)',
+        tag: 'LOCAL DISPLAY',
+        desc: '128x64 I2C display showing live machine metrics, permanent IP address footer, and dynamic jittering motion alert screen.'
+      },
+      'comp-buzzer': {
+        title: '2-Wire Buzzer',
+        tag: 'AUDIBLE ALARM',
+        desc: 'Connected to GPIO 18 and GND. Pings with a sharp 120ms beep every 2 seconds only when a safety limit is breached.'
+      },
+      'comp-relay': {
+        title: '5V Relay Module',
+        tag: 'SAFETY ACTUATOR',
+        desc: 'Optocoupled 5V relay on GPIO 26. Switches 5V power through COM/NO contacts to flash the alert LED in sync with the buzzer.'
+      },
+      'comp-led': {
+        title: 'Alert LED + 330Ω Resistor',
+        tag: 'VISUAL ALARM',
+        desc: 'Red 5mm LED with a 330Ω current-limiting resistor on the cathode to Ground. Produces visual flashing pulses during threshold alarms.'
+      }
+    };
+
+    document.querySelectorAll('.comp-box').forEach(c => {
+      c.addEventListener('click', () => {
+        const id = c.id;
+        if (compData[id]) {
+          document.getElementById('det-title').innerText = compData[id].title;
+          document.getElementById('det-tag').innerText = compData[id].tag;
+          document.getElementById('det-desc').innerText = compData[id].desc;
+        }
+      });
+    });
+
+    // Filter Chips
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const filter = btn.getAttribute('data-f');
+
+        document.querySelectorAll('.wire').forEach(w => {
+          if (filter === 'all' || w.getAttribute('data-group') === filter) {
+            w.classList.remove('dimmed');
+          } else {
+            w.classList.add('dimmed');
+          }
+        });
+      });
+    });
+
+    // Simulate Alarm Pulse
+    let simActive = false;
+    let simTimer = null;
+    const simBtn = document.getElementById('btn-sim');
+    const led = document.getElementById('vis-led');
+
+    simBtn.addEventListener('click', () => {
+      simActive = !simActive;
+      if (simActive) {
+        simBtn.classList.add('active');
+        simBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop Simulation`;
+        document.getElementById('wires-group').classList.add('simulating');
+
+        simTimer = setInterval(() => {
+          led.setAttribute('fill', '#f85149');
+          led.setAttribute('filter', 'url(#led-glow)');
+          setTimeout(() => {
+            led.setAttribute('fill', '#da3633');
+            led.removeAttribute('filter');
+          }, 150);
+        }, 1500);
+      } else {
+        simBtn.classList.remove('active');
+        simBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Simulate Alarm Pulse`;
+        document.getElementById('wires-group').classList.remove('simulating');
+        clearInterval(simTimer);
+        led.setAttribute('fill', '#da3633');
+        led.removeAttribute('filter');
+      }
+    });
+  </script>
+</body>
+</html>
